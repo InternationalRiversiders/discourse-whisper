@@ -1,0 +1,7 @@
+en:
+  site_settings:
+    whisper_enabled: "启用树洞"
+    whisper_allowed_groups: "允许使用树洞的用户组（管理员始终可用）"
+    whisper_admin_groups: "允许管理树洞的用户组"
+    whisper_read_only: "树洞只读预览：关闭写入和通知投递"
+    whisper_admin_only: "树洞私有验收：仅管理员可访问"

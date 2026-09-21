@@ -1,0 +1,14 @@
+plugins:
+  whisper_enabled:
+    default: false
+    client: true
+  whisper_read_only:
+    default: true
+  whisper_admin_only:
+    default: false
+  whisper_allowed_groups:
+    default: ""
+    type: group_list
+  whisper_admin_groups:
+    default: ""
+    type: group_list
