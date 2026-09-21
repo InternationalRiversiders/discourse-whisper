@@ -170,7 +170,7 @@ module DiscourseWhisper
       send_data(item.bytes,type:'image/jpeg',disposition:'inline')
     end
     def legacy
-      redirect_to('/whisper?'+Service.legacy_query(params[:path].to_s,params).to_query,allow_other_host:false)
+      redirect_to('/whisper?'+Service.legacy_query(params[:path].to_s.delete_suffix('/'),params.permit(:q,:sort,:page,:tab).to_h).to_query,allow_other_host:false)
     end
     def export
       Access.check!(current_user)

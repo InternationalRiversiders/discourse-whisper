@@ -250,7 +250,7 @@ module DiscourseWhisper
       end
       return {view:'mine'} if path=='me'
       return {view:'notifications'} if path=='notifications'
-      return {view:'admin',part:params['tab']=='reports' ? 'reports' : 'posts'} if path=='admin'
+      return {view:'admin',part:params['tab']=='reports' ? 'reports' : 'posts'}.merge(params.to_h.slice('page')) if path=='admin'
       {view:'feed'}.merge(params.to_h.slice('q','sort','page'))
     end
   end

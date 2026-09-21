@@ -203,6 +203,15 @@ class WhisperTest < Minitest::Test
     assert_equal '匿名 A',A::Service.alias_name(p,c.user_id)
     assert_empty A::Inbox.where(user_id:@bob.id)
   end
+  def test_http_legacy_fallback_accepts_only_safe_query_parameters
+    session=ActionDispatch::Integration::Session.new(Rails.application);session.host!('community.test')
+    session.get('/whisper/legacy/?q=example&sort=active&page=2&sso=private&sig=private')
+    assert_equal 302,session.response.status
+    assert_equal({'view'=>'feed','q'=>'example','sort'=>'active','page'=>'2'},Rack::Utils.parse_query(URI.parse(session.response.location).query))
+    session.get('/whisper/legacy/admin/?tab=reports&page=2')
+    assert_equal 302,session.response.status
+    assert_equal({'view'=>'admin','part'=>'reports','page'=>'2'},Rack::Utils.parse_query(URI.parse(session.response.location).query))
+  end
   def test_legacy_routes_whitelist_and_reply_lookup
     p=post
     A::Legacy.create!(source:'Post',legacy_id:'old-post',target_kind:'Post',target_id:p.id,data:{})
