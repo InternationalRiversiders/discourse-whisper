@@ -3,7 +3,7 @@ import { on } from "@ember/modifier";
 import { fn } from "@ember/helper";
 import { eq } from "discourse/truth-helpers";
 import dIcon from "discourse/ui-kit/helpers/d-icon";
-import DRelativeDate from "discourse/ui-kit/d-relative-date";
+import DRelativeDate from "./campus-relative-date";
 
 export default class extends Component {
   get anchor() { return this.args.entry.kind === "Post" ? "whisper-first-post" : `whisper-reply-${this.args.entry.id}`; }

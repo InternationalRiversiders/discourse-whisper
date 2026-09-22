@@ -8,7 +8,7 @@ import { eq } from "discourse/truth-helpers";
 import { ajax } from "discourse/lib/ajax";
 import { extractError } from "discourse/lib/ajax-error";
 import dIcon from "discourse/ui-kit/helpers/d-icon";
-import DRelativeDate from "discourse/ui-kit/d-relative-date";
+import DRelativeDate from "./campus-relative-date";
 import AppForm from "./whisper-form";
 import Entry from "./whisper-entry";
 
