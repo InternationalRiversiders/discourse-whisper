@@ -134,8 +134,8 @@ export default class extends Component {
   @action deleteComment(row) { return this.entryAction("delete",{kind:"Comment",id:row.id}); }
   <template>
     <section class="whisper-native" data-view={{this.data.view}} aria-busy={{if this.busy "true" "false"}} {{this.mount}}>
-      <header class="whisper-heading"><div><h1>{{dIcon "leaf"}} 树洞</h1><p>同一个树洞里，认真听彼此说话。</p></div>{{#if this.canPost}}<button type="button" class="btn btn-primary create" {{on "click" (fn this.tab "new")}}>{{dIcon "plus"}} 新树洞</button>{{/if}}</header>
-      <nav class="navigation-container whisper-navigation" aria-label="树洞导航"><ul class="nav nav-pills">{{#each this.data.tabs as |tab|}}<li><button type="button" class={{if (eq this.data.view tab.id) "active"}} {{on "click" (fn this.tab tab.id)}}>{{tab.label}}{{#if (eq tab.id "notifications")}}{{#if this.data.unread}}<span class="badge-notification">{{this.data.unread}}</span>{{/if}}{{/if}}</button></li>{{/each}}</ul></nav>
+      <h1 class="sr-only">树洞</h1>
+      <nav class="navigation-container whisper-navigation" aria-label="树洞导航"><ul class="nav nav-pills">{{#each this.data.tabs as |tab|}}<li><button type="button" class={{if (eq this.data.view tab.id) "active"}} {{on "click" (fn this.tab tab.id)}}>{{tab.label}}{{#if (eq tab.id "notifications")}}{{#if this.data.unread}}<span class="badge-notification">{{this.data.unread}}</span>{{/if}}{{/if}}</button></li>{{/each}}</ul>{{#if this.canPost}}<button type="button" class="btn btn-primary create" {{on "click" (fn this.tab "new")}}>{{dIcon "plus"}} 新树洞</button>{{/if}}</nav>
       {{#if this.data.readonly}}<p class="alert alert-info whisper-note">{{dIcon "lock"}} 真实数据只读预览，发布、互动和通知投递已暂停。</p>{{else if this.data.banned}}<p class="alert alert-info whisper-note">已限制树洞发言：{{this.data.ban_reason}}。你仍可浏览和删除自己的内容。</p>{{/if}}
       {{#if this.error}}<p role="alert" class="alert alert-error">{{this.error}}</p>{{/if}}{{#if this.notice}}<p role="status" class="alert alert-info">{{this.notice}}</p>{{/if}}
       {{#if (eq this.data.view "feed")}}

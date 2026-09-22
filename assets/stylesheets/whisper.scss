@@ -7,10 +7,6 @@
   button, input, select, textarea { font: inherit; }
   button, a { touch-action: manipulation; }
   a:focus-visible, button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-visible { outline: 2px solid var(--tertiary); outline-offset: 3px; }
-  .whisper-heading { display: flex; gap: 1em; align-items: center; justify-content: space-between; margin-bottom: 1.3em; }
-  .whisper-heading h1 { display: flex; gap: .45em; align-items: center; font-size: 1.7em; margin: 0 0 .25em; }
-  .whisper-heading h1 .d-icon { color: var(--tertiary); font-size: .7em; }
-  .whisper-heading p { color: var(--primary-medium); margin: 0; font-size: .92em; }
   .whisper-navigation { margin: 0; padding: 0 0 .7em; border-bottom: 1px solid var(--primary-low); }
   .nav-pills { display: flex; flex-wrap: wrap; gap: .25em; margin: 0; }
   .nav-pills li { list-style: none; margin: 0; }
@@ -103,9 +99,6 @@
   .whisper-note { margin-top: 1em; font-size: .9em; }
   @media (max-width: 600px) {
     margin-top: 1em;
-    .whisper-heading h1 { font-size: 1.4em; }
-    .whisper-heading p { font-size: .78em; }
-    .whisper-heading .create { white-space: nowrap; font-size: .85em; }
     .nav-pills button { padding: .6em .7em; font-size: .9em; }
     .whisper-search { width: 100%; }
     .whisper-search input { flex: 1; width: 0; }
@@ -122,3 +115,9 @@
     .whisper-notification { gap: .6em; padding-left: .4em; }
   }
 }
+
+.whisper-native .whisper-navigation { display: flex; flex-wrap: nowrap; align-items: center; gap: 12px; }
+.whisper-native .whisper-navigation .nav-pills { flex: 1 1 auto; min-width: 0; flex-wrap: nowrap; overflow-x: auto; scrollbar-width: thin; padding: 4px 0; }
+.whisper-native .whisper-navigation .nav-pills li { flex: 0 0 auto; white-space: nowrap; }
+.whisper-native .whisper-navigation .create { flex: 0 0 auto; margin-inline-start: auto; white-space: nowrap; }
+@media (max-width: 600px) { .whisper-native .whisper-navigation { gap: 6px; } .whisper-native .whisper-navigation .create { padding: 8px; font-size: .85em; } }
