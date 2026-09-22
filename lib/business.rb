@@ -108,7 +108,7 @@ module DiscourseWhisper
         page,paging=paginate(comments,selected,50)
         # A hidden post remains visible only to its owner/staff; hidden reply bodies remain staff-only.
         out.merge!(post:summary(post,user).merge(entry(post,post,user)),replies:page.map { |c| entry(c,post,user,floors) },pagination:paging,
-          audits:Audit.where(target_kind:'Post',target_id:post.id,action:'reveal_identity').order(:created_at,:id).map { |a| {id:a.id,moderator:Shared.user_name(a.user_id),reason:a.reason,created_at:a.created_at} })
+          audits:Audit.where(target_kind:'Post',target_id:post.id,action:'reveal_identity').order(:created_at,:id).map { |a| {id:a.id,moderator:Shared.user_name(a.user_id),moderator_user:Shared.forum_user(a.user_id),reason:a.reason,created_at:a.created_at} })
       when 'notifications'
         scope,paging=paginate(Inbox.where(user_id:user.id).order(created_at: :desc,id: :desc),query)
         out[:rows]=scope.map do |n|
@@ -139,9 +139,9 @@ module DiscourseWhisper
         out[:pagination]=paging
       when 'audits'
         scope,paging=paginate(Audit.order(created_at: :desc,id: :desc),query,30)
-        out[:rows]=scope.map { |a| {id:a.id,moderator:Shared.user_name(a.user_id),action:a.action,reason:a.reason,created_at:a.created_at} };out[:pagination]=paging
+        out[:rows]=scope.map { |a| {id:a.id,moderator:Shared.user_name(a.user_id),moderator_user:Shared.forum_user(a.user_id),action:a.action,reason:a.reason,created_at:a.created_at} };out[:pagination]=paging
       when 'bans'
-        out[:rows]=Ban.order(id: :desc).map { |b| {id:b.id,username:Shared.user_name(b.user_id),reason:b.reason,created_at:b.created_at} }
+        out[:rows]=Ban.order(id: :desc).map { |b| {id:b.id,username:Shared.user_name(b.user_id),forum_user:Shared.forum_user(b.user_id),reason:b.reason,created_at:b.created_at} }
         out[:forms]=[Ui.form('树洞发言限制','ban',[Ui.field('username','论坛用户名',required:true),Ui.field('banned','限制发言',true,type:'checkbox'),Ui.field('reason','处理理由',required:true,maxlength:240)],button:'保存限制')] unless out[:readonly]
       end
     end

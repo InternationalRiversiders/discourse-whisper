@@ -70,6 +70,11 @@ module DiscourseWhisper
     def self.audit(actor, action, item, reason, details = {})
       Audit.create!(user_id: actor.id, action: action, target_kind: item.class.name.demodulize, target_id: item.id, reason: text(reason, 240), details: details)
     end
+    # Public forum fields only; callers enforce each feature's anonymity rules.
+    def self.forum_user(id)
+      user = id.is_a?(User) ? id : User.find_by(id: id)
+      user && { id: user.id, username: user.username, avatar_template: user.avatar_template }
+    end
     def self.user_name(id) = User.find_by(id: id)&.username || '已注销用户'
     def self.notify(user_id, kind, post: nil, comment: nil, message: nil, key:)
       return unless user_id && User.exists?(user_id)

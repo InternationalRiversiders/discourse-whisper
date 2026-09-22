@@ -121,3 +121,11 @@
 .whisper-native .whisper-navigation .nav-pills li { flex: 0 0 auto; white-space: nowrap; }
 .whisper-native .whisper-navigation .create { flex: 0 0 auto; margin-inline-start: auto; white-space: nowrap; }
 @media (max-width: 600px) { .whisper-native .whisper-navigation { gap: 6px; } .whisper-native .whisper-navigation .create { padding: 8px; font-size: .85em; } }
+
+// Forum identity links use Discourse's avatar and native user card.
+.whisper-forum-user {
+  display: inline-flex; align-items: center; gap: .4em; max-width: 100%;
+  vertical-align: middle; color: var(--primary); font-weight: 600;
+  .avatar { width: 24px; height: 24px; flex: 0 0 24px; border-radius: 50%; }
+  > span { min-width: 0; overflow-wrap: anywhere; }
+}
