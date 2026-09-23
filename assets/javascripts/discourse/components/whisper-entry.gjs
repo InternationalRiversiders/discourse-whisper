@@ -21,9 +21,9 @@ export default class extends Component {
         <footer class="post-controls whisper-post-controls">
           <div class="actions">
             {{#if @entry.can_interact}}
-              <button type="button" class="btn btn-flat {{if (eq @entry.reaction 1) 'is-active'}}" aria-label="赞" aria-pressed={{if (eq @entry.reaction 1) "true" "false"}} {{on "click" (fn @action "like" @entry)}}>{{dIcon "heart"}} {{@entry.likes}}</button>
+              <button type="button" class="btn btn-flat {{if (eq @entry.reaction 1) 'is-active'}}" title="赞" aria-label="赞" aria-pressed={{if (eq @entry.reaction 1) "true" "false"}} {{on "click" (fn @action "like" @entry)}}>{{dIcon "thumbs-up"}} {{@entry.likes}}</button>
               <button type="button" class="btn btn-flat {{if (eq @entry.reaction -1) 'is-active'}}" aria-label="踩" aria-pressed={{if (eq @entry.reaction -1) "true" "false"}} {{on "click" (fn @action "dislike" @entry)}}>{{dIcon "thumbs-down"}} {{@entry.dislikes}}</button>
-            {{else}}<span class="whisper-passive-count">{{dIcon "heart"}} {{@entry.likes}}</span>{{/if}}
+            {{else}}<span class="whisper-passive-count" title="赞">{{dIcon "thumbs-up"}} <span class="sr-only">赞</span>{{@entry.likes}}</span>{{/if}}
             <button type="button" class="btn btn-flat" title="复制链接" aria-label="复制链接" {{on "click" (fn @action "copy" @entry)}}>{{dIcon "link"}}</button>
             {{#if @entry.can_interact}}<button type="button" class="btn btn-flat" title="举报" aria-label="举报" disabled={{@entry.reported}} {{on "click" (fn @action "report" @entry)}}>{{dIcon "flag"}}</button>{{/if}}
             {{#if @entry.can_delete}}<button type="button" class="btn btn-flat" title="删除我的内容" aria-label="删除我的内容" {{on "click" (fn @action "delete" @entry)}}>{{dIcon "trash-can"}}</button>{{/if}}

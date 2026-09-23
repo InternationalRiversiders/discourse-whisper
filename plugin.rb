@@ -8,7 +8,7 @@
 
 enabled_site_setting :whisper_enabled
 register_asset "stylesheets/whisper.scss"
-%w[leaf reply heart thumbs-down flag trash-can plus magnifying-glass link shield-halved eye chevron-left chevron-right bell lock].each { |name| register_svg_icon name }
+%w[leaf reply thumbs-up thumbs-down flag trash-can plus magnifying-glass link shield-halved eye chevron-left chevron-right bell lock].each { |name| register_svg_icon name }
 require_relative "lib/engine"
 after_initialize do
   require_relative "lib/core"

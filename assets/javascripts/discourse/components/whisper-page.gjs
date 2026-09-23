@@ -153,7 +153,7 @@ export default class extends Component {
             <footer class="whisper-feed-card__footer">
               <span class="whisper-feed-card__identity">{{dIcon "leaf"}}{{if row.comment "你的回复" "匿名树洞"}}</span>
               {{#if row.missing_media_count}}<span>旧版有缺失配图</span>{{/if}}
-              <div class="whisper-feed-card__stats">{{#unless row.comment}}<span title="回复数">{{dIcon "reply"}}<span class="sr-only">回复</span>{{row.replies}}</span><span title="赞">{{dIcon "heart"}}<span class="sr-only">赞</span>{{row.likes}}</span>{{/unless}}<span title={{if (eq this.data.sort "active") "最近活动" "发表时间"}}><DRelativeDate @date={{if (eq this.data.sort "active") row.activity_at row.created_at}} /></span>{{#if row.comment}}{{#if row.can_delete}}<button class="btn btn-flat" type="button" aria-label="删除我的回复" {{on "click" (fn this.deleteComment row)}}>{{dIcon "trash-can"}}</button>{{/if}}{{/if}}</div>
+              <div class="whisper-feed-card__stats">{{#unless row.comment}}<span title="回复数">{{dIcon "reply"}}<span class="sr-only">回复</span>{{row.replies}}</span><span title="赞">{{dIcon "thumbs-up"}}<span class="sr-only">赞</span>{{row.likes}}</span>{{/unless}}<span title={{if (eq this.data.sort "active") "最近活动" "发表时间"}}><DRelativeDate @date={{if (eq this.data.sort "active") row.activity_at row.created_at}} /></span>{{#if row.comment}}{{#if row.can_delete}}<button class="btn btn-flat" type="button" aria-label="删除我的回复" {{on "click" (fn this.deleteComment row)}}>{{dIcon "trash-can"}}</button>{{/if}}{{/if}}</div>
             </footer>
           </article>
         {{/each}}</div>
