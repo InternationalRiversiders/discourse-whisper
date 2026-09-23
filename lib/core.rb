@@ -127,7 +127,7 @@ module DiscourseWhisper
   end
   class MainController < ::ApplicationController
     requires_plugin 'discourse-whisper'
-    skip_before_action :check_xhr, only: [:index,:media,:legacy,:export]
+    skip_before_action :check_xhr, only: [:index,:media,:legacy]
     before_action :enabled!
     rescue_from Error, ArgumentError do |error|
       render_json_dump({errors:[error.message]},status:422)
@@ -176,11 +176,6 @@ module DiscourseWhisper
     end
     def legacy
       redirect_to('/whisper?'+Service.legacy_query(params[:path].to_s.delete_suffix('/'),params.permit(:q,:sort,:page,:tab).to_h).to_query,allow_other_host:false)
-    end
-    def export
-      Access.check!(current_user)
-      response.headers['Cache-Control']='private, no-store'
-      send_data(JSON.pretty_generate(UserLifecycle.export(current_user.id)),type:'application/json',filename:'my-whisper-data.json')
     end
     private
     def enabled!

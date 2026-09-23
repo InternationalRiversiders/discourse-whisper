@@ -1,9 +1,6 @@
 # frozen_string_literal: true
 module DiscourseWhisper
   module UserLifecycle
-    def self.export(id)
-      {exported_at:Time.current.iso8601,posts:Post.where(user_id:id).as_json,comments:Comment.where(user_id:id).as_json,reactions:Reaction.where(user_id:id).as_json,notifications:Inbox.where(user_id:id).as_json,restriction:Ban.find_by(user_id:id)&.as_json}
-    end
     def self.purge(id,erase_content:true)
       return unless Post.table_exists?
       Record.transaction do

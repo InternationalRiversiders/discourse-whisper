@@ -28,6 +28,12 @@ class WhisperTest < Minitest::Test
     A::Comment.find(call(user,'reply',{id:p.id,parent_id:parent&.id,body:body})[:query][:reply])
   end
   def state(user=@alice,**query) = A::Service.state(user,query.deep_stringify_keys)
+  def test_removed_personal_export_endpoint
+    session=ActionDispatch::Integration::Session.new(Rails.application);session.host!('community.test')
+    session.get('/whisper/my-data')
+    assert_equal 404,session.response.status
+  end
+
   def test_permission_readonly_and_admin_preview_gates
     assert_raises(Discourse::InvalidAccess) { state(@outsider) }
     assert_raises(Discourse::InvalidAccess) { call(@outsider,'post',{body:'x'}) }
@@ -187,8 +193,6 @@ class WhisperTest < Minitest::Test
     p=post;c=reply(p);call(@admin,'reveal',{id:p.id,reason:'测试'})
     A::Legacy.create!(source:'User',legacy_id:'old-alice',data:{externalUserId:@alice.id.to_s,forumUsername:@alice.username})
     A::Legacy.create!(source:'Post',legacy_id:'old-post',target_kind:'Post',target_id:p.id,data:{authorId:'old-alice',body:p.body})
-    export=A::UserLifecycle.export(@alice.id)
-    assert_equal 1,export[:posts].size;assert_empty export[:comments]
     A::UserLifecycle.purge(@alice.id)
     assert_equal 'deleted',p.reload.status;refute_equal @alice.id,p.user_id
     assert_empty A::Legacy.all

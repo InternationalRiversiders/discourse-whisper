@@ -43,7 +43,7 @@ module DiscourseWhisper
     end
     def self.summary(post,user)
       reaction=Reaction.where(target_kind:'Post',target_id:post.id)
-      {id:post.id,public_code:post.public_code,title:post.title.presence || "树洞 ##{post.public_code}",excerpt:post.body.truncate(180),created_at:post.created_at,activity_at:post.last_comment_at || post.created_at,status:post.status,mine:post.user_id==user.id,url:path(post),
+      {id:post.id,public_code:post.public_code,title:post.title.presence || '匿名树洞',excerpt:post.body.truncate(180),created_at:post.created_at,activity_at:post.last_comment_at || post.created_at,status:post.status,mine:post.user_id==user.id,url:path(post),
        replies:Comment.where(target_kind:'Post',target_id:post.id,status:'visible').count,likes:reaction.where(value:1).count,dislikes:reaction.where(value:-1).count,images:Shared.media_urls(post.media_ids.first(2)),image_count:post.media_ids.length,missing_media_count:post.missing_media_count}
     end
     def self.entry(item,post,user,floors={})
@@ -75,7 +75,7 @@ module DiscourseWhisper
           scope,paging=paginate(Comment.where(user_id:user.id,status:'visible').order(created_at: :desc,id: :desc),query)
           out[:rows]=scope.map do |c|
             post=Post.find(c.target_id);available=can_view?(post,user)
-            {id:c.id,comment:true,title:available ? (post.title.presence || "树洞 ##{post.public_code}") : '树洞已不可见',excerpt:c.body,created_at:c.created_at,activity_at:c.created_at,status:c.status,url:available ? path(post,c) : nil,can_delete:!SiteSetting.whisper_read_only}
+            {id:c.id,comment:true,title:available ? (post.title.presence || '匿名树洞') : '树洞已不可见',excerpt:c.body,created_at:c.created_at,activity_at:c.created_at,status:c.status,url:available ? path(post,c) : nil,can_delete:!SiteSetting.whisper_read_only}
           end
         else
           q=query['q'].to_s.strip
@@ -114,7 +114,7 @@ module DiscourseWhisper
         out[:rows]=scope.map do |n|
           post=Post.find_by(id:n.post_id);available=post && can_view?(post,user)
           comment=Comment.find_by(id:n.comment_id,target_id:post&.id)
-          {id:n.id,title:notification_text(n.kind),message:n.message.presence || (n.kind=='COMMENT_REPLY' && available && comment&.status=='visible' ? comment.body.truncate(80) : nil),read:n.read,historical:n.historical,created_at:n.created_at,url:available ? path(post,comment) : nil,post_label:available ? (post.title.presence || "树洞 ##{post.public_code}") : '树洞已不可见'}
+          {id:n.id,title:notification_text(n.kind),message:n.message.presence || (n.kind=='COMMENT_REPLY' && available && comment&.status=='visible' ? comment.body.truncate(80) : nil),read:n.read,historical:n.historical,created_at:n.created_at,url:available ? path(post,comment) : nil,post_label:available ? (post.title.presence || '匿名树洞') : '树洞已不可见'}
         end
         out[:pagination]=paging
       when 'admin'
