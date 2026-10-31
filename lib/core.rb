@@ -84,19 +84,7 @@ module DiscourseWhisper
       end
       inbox
     end
-    def self.deliver
-      return unless SiteSetting.whisper_enabled && !SiteSetting.whisper_read_only
-      Event.where(notification_id: nil).order(:id).limit(100).each do |event|
-        event.with_lock do
-          next if event.notification_id || !Access.member?(User.find_by(id: event.user_id))
-          n = Notification.create!(user_id: event.user_id, notification_type: Notification.types[:custom], skip_send_email: true,
-            data: {river_app: 'whisper', river_text: event.text, river_path: event.path, river_icon: 'leaf', message: 'whisper', display_username: '', topic_title: event.text}.to_json)
-          event.update!(notification_id: n.id)
-        end
-      rescue StandardError => e
-        Rails.logger.warn("whisper notification #{event.id}: #{e.class}")
-      end
-    end
+    def self.deliver = Notifications.deliver
     def self.image(bytes)
       signature = bytes.byteslice(0,12)
       valid = signature&.start_with?("\xFF\xD8\xFF".b, "\x89PNG\r\n\x1A\n".b, 'GIF87a'.b, 'GIF89a'.b) || (signature&.start_with?('RIFF') && signature.byteslice(8,4)=='WEBP')
@@ -144,7 +132,7 @@ module DiscourseWhisper
       RateLimiter.new(current_user,'whisper-write',40,1.minute).performed!
       data=params.fetch(:data,ActionController::Parameters.new).permit!.to_h
       result=Shared.command(current_user,params.require(:operation).to_s,data,params.require(:request_id)) { Service.call(current_user,params[:operation].to_s,data) }
-      Shared.deliver
+      Notifications.enqueue
       response.headers['Cache-Control']='private, no-store'
       render_json_dump(result)
     end

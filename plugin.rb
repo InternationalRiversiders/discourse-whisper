@@ -12,6 +12,7 @@ register_asset "stylesheets/whisper.scss"
 require_relative "lib/engine"
 after_initialize do
   require_relative "lib/core"
+  require_relative "lib/notifications"
   require_relative "lib/business"
   require_relative "lib/importer"
   require_relative "lib/user_lifecycle"
