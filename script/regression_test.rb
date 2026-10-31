@@ -28,6 +28,96 @@ class WhisperTest < Minitest::Test
     A::Comment.find(call(user,'reply',{id:p.id,parent_id:parent&.id,body:body})[:query][:reply])
   end
   def state(user=@alice,**query) = A::Service.state(user,query.deep_stringify_keys)
+  def test_public_identity_is_explicit_per_item_and_old_defaults_stay_private
+    p=post;c=reply(p)
+    c.update!(anonymous:false) # legacy flag must never expose an old reply
+    refute p.public_author
+    refute state(@bob,view:'post',id:p.id)[:replies].first.key?(:author)
+    public_post=A::Post.find(call(@alice,'post',{body:'公开发帖',public_author:true})[:query][:id])
+    row=state(@bob)[:rows].find { |r| r[:id]==public_post.id }
+    assert_equal @alice.username,row[:author][:username]
+    assert_equal %i[avatar_template id username],row[:author].keys.sort
+    assert_equal '实名',row[:identity_label]
+    refute state(@bob,view:'post',id:p.id)[:post].key?(:author)
+    anon_reply=reply(public_post,@alice)
+    detail=state(@bob,view:'post',id:public_post.id)[:replies].first
+    refute detail.key?(:author)
+    refute_equal '洞主',detail[:alias] # cannot link an anonymous reply to a public OP
+    public_reply=A::Comment.find(call(@bob,'reply',{id:p.id,body:'公开回复',public_author:'true'})[:query][:reply])
+    refute public_reply.anonymous
+    reply(p,@carol,parent:public_reply)
+    entries=state(@carol,view:'post',id:p.id)[:replies]
+    assert_equal @bob.username,entries[1][:alias]
+    assert_equal @bob.username,entries[2][:parent][:alias]
+    refute entries[0].key?(:author)
+    assert_equal '匿名 A',entries[0][:alias]
+  end
+  def test_admin_identity_mode_includes_posts_replies_and_parents_but_never_private_profile_fields
+    p=post;c=reply(p);reply(p,@carol,parent:c)
+    assert_raises(Discourse::InvalidAccess) { state(@bob,identity_mode:true) }
+    assert_raises(Discourse::InvalidAccess) { state(@outsider,identity_mode:true) }
+    refute state(@admin,view:'post',id:p.id)[:post].key?(:author)
+    s=state(@admin,view:'post',id:p.id,identity_mode:true)
+    assert s[:identity_mode]
+    assert_equal @alice.id,s[:post][:author][:id]
+    assert_equal @bob.username,s[:replies][0][:author][:username]
+    assert_equal @bob.username,s[:replies][1][:parent][:alias]
+    assert_equal '仅管理员可见',s[:post][:identity_label]
+    refute_includes s.to_json,@alice.email
+    assert_equal @alice.id,state(@admin,view:'admin',identity_mode:true)[:rows].first[:author][:id]
+    SiteSetting.whisper_read_only=true
+    assert state(@admin,identity_mode:true)[:rows].first[:author]
+    assert_empty A::Service.identity(p,@bob,identity_mode:true)
+  end
+  def test_delegated_admin_mode_permission_is_checked_each_time
+    p=post
+    SiteSetting.whisper_admin_groups=@group.id.to_s
+    assert state(@bob,identity_mode:true)[:rows].first[:author]
+    SiteSetting.whisper_admin_groups=''
+    assert_raises(Discourse::InvalidAccess) { state(@bob,identity_mode:true) }
+    assert_raises(Discourse::InvalidAccess) { state(@bob,view:'post',id:p.id,identity_mode:true) }
+    @admin.update!(suspended_till:1.day.from_now)
+    assert_raises(Discourse::InvalidAccess) { state(@admin,identity_mode:true) }
+  end
+  def test_hidden_public_reply_identity_is_removed_from_reply_and_parent
+    p=post
+    c=A::Comment.find(call(@bob,'reply',{id:p.id,body:'公开回复',public_author:true})[:query][:reply])
+    reply(p,@carol,parent:c)
+    call(@admin,'moderate',{kind:'Comment',id:c.id,status:'hidden',reason:'测试'})
+    s=state(@alice,view:'post',id:p.id)
+    refute s[:replies].first.key?(:author)
+    refute_includes s.to_json,@bob.username
+    assert_equal @bob.id,state(@admin,view:'post',id:p.id,identity_mode:true)[:replies].first[:author][:id]
+  end
+  def test_identity_consent_idempotency_and_account_anonymization
+    key=SecureRandom.uuid
+    data={body:'实名内容',public_author:true}
+    result=call(@alice,'post',data,key:key)
+    assert_equal result.deep_stringify_keys,call(@alice,'post',data,key:key)
+    assert_raises(A::Error) { call(@alice,'post',data.merge(public_author:false),key:key) }
+    p=A::Post.find(result[:query][:id])
+    A::UserLifecycle.purge(@alice.id,erase_content:false)
+    refute p.reload.public_author
+    refute_includes state(@admin,identity_mode:true).to_json,@alice.username
+  end
+  def test_identity_http_is_private_and_forged_mode_is_rejected
+    p=post;c=reply(p)
+    session=ActionDispatch::Integration::Session.new(Rails.application);session.host!('community.test')
+    key=ApiKey.create!(user:@bob,created_by:@admin,description:'Disposable identity test')
+    headers={'HTTP_API_KEY'=>key.key,'HTTP_X_REQUESTED_WITH'=>'XMLHttpRequest'}
+    session.get("/whisper/state.json?view=post&id=#{p.id}&identity_mode=1",headers:headers)
+    assert_equal 403,session.response.status
+    session.get("/whisper/state.json?view=post&id=#{p.id}",headers:headers)
+    assert_equal 200,session.response.status
+    refute_includes session.response.body,@alice.username
+    key.update!(user:@admin)
+    session.get("/whisper/state.json?view=post&id=#{p.id}&identity_mode=1",headers:headers)
+    assert_equal 200,session.response.status
+    assert_includes session.response.headers['Cache-Control'],'no-store'
+    assert_equal @alice.username,JSON.parse(session.response.body).dig('post','author','username')
+  ensure
+    key&.destroy!
+  end
   def test_removed_personal_export_endpoint
     session=ActionDispatch::Integration::Session.new(Rails.application);session.host!('community.test')
     session.get('/whisper/my-data')

@@ -128,5 +128,20 @@
   display: inline-flex; align-items: center; gap: .4em; max-width: 100%;
   vertical-align: middle; color: var(--primary); font-weight: 600;
   .avatar { width: 24px; height: 24px; flex: 0 0 24px; border-radius: 50%; }
-  > span { min-width: 0; overflow-wrap: anywhere; }
+  > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+}
+
+.whisper-native {
+  .whisper-identity-toolbar, .whisper-identity-choice { display: flex; flex-wrap: wrap; align-items: center; gap: .65em; margin: 1em 0; }
+  .whisper-identity-toolbar small, .whisper-identity-choice small { color: var(--primary-medium); }
+  .whisper-feed-card__identity { min-width: 0; max-width: 100%; }
+  .whisper-feed-card__identity .whisper-forum-user { min-width: 0; max-width: 16em; }
+  .whisper-status { white-space: nowrap; }
+  .names { min-width: 0; max-width: 100%; }
+  .names .whisper-forum-user { max-width: min(20em, 100%); }
+  .topic-avatar .whisper-forum-user .avatar { width: 42px; height: 42px; flex-basis: 42px; }
+  @media (max-width: 600px) {
+    .topic-avatar .whisper-forum-user .avatar { width: 30px; height: 30px; flex-basis: 30px; }
+    .whisper-feed-card__identity .whisper-forum-user { max-width: 11em; }
+  }
 }

@@ -8,7 +8,7 @@ export default class extends Component {
     {{#if @user.username}}
       <DUserLink @user={{@user}} class="whisper-forum-user">
         {{#unless @hideAvatar}}{{dAvatar @user imageSize="small" loading="lazy"}}{{/unless}}
-        <span>{{@user.username}}</span>
+        {{#unless @avatarOnly}}<span title={{@user.username}}>{{@user.username}}</span>{{/unless}}
       </DUserLink>
     {{else}}
       <span class="whisper-user-label">{{@name}}</span>

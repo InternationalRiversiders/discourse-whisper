@@ -22,7 +22,7 @@ module DiscourseWhisper
       raise Discourse::InvalidAccess if item.is_a?(Comment) && item.target_kind!='Post'
     end
     def self.alias_name(post,uid)
-      return '洞主' if post.user_id==uid
+      return '洞主' if post.user_id==uid && !post.public_author
       a=Alias.find_by(post_id:post.id,user_id:uid)
       return '匿名' unless a
       n=a.ordinal;name=''
@@ -41,31 +41,47 @@ module DiscourseWhisper
       total=scope.count;pages=[(total.to_f/size).ceil,1].max;page=[[query['page'].to_i,1].max,pages].min
       [scope.offset((page-1)*size).limit(size),{page:page,pages:pages,total:total,next:page<pages ? page+1 : nil,previous:page>1 ? page-1 : nil}]
     end
-    def self.summary(post,user)
-      reaction=Reaction.where(target_kind:'Post',target_id:post.id)
-      {id:post.id,public_code:post.public_code,title:post.title.presence || '匿名树洞',excerpt:post.body.truncate(180),created_at:post.created_at,activity_at:post.last_comment_at || post.created_at,status:post.status,mine:post.user_id==user.id,url:path(post),
-       replies:Comment.where(target_kind:'Post',target_id:post.id,status:'visible').count,likes:reaction.where(value:1).count,dislikes:reaction.where(value:-1).count,images:Shared.media_urls(post.media_ids.first(2)),image_count:post.media_ids.length,missing_media_count:post.missing_media_count}
+    # Identity is authorized here as well as at the HTTP/state boundary. Never
+    # infer consent from the old comment anonymous flag or another post by this user.
+    def self.identity(item,user,identity_mode:false)
+      visible = item.public_author && item.status == 'visible'
+      privileged = identity_mode && Access.admin?(user)
+      return {} unless visible || privileged
+      author = Shared.forum_user(item.user_id)
+      {author:author,identity_label:visible ? '实名' : '仅管理员可见'}
     end
-    def self.entry(item,post,user,floors={})
+    def self.title(post) = post.title.presence || (post.public_author ? '树洞' : '匿名树洞')
+    def self.summary(post,user,identity_mode:false)
+      reaction=Reaction.where(target_kind:'Post',target_id:post.id)
+      {id:post.id,public_code:post.public_code,title:title(post),excerpt:post.body.truncate(180),created_at:post.created_at,activity_at:post.last_comment_at || post.created_at,status:post.status,mine:post.user_id==user.id,url:path(post),
+       replies:Comment.where(target_kind:'Post',target_id:post.id,status:'visible').count,likes:reaction.where(value:1).count,dislikes:reaction.where(value:-1).count,images:Shared.media_urls(post.media_ids.first(2)),image_count:post.media_ids.length,missing_media_count:post.missing_media_count}.merge(identity(post,user,identity_mode:identity_mode))
+    end
+    def self.entry(item,post,user,floors={},identity_mode:false)
       kind=item.is_a?(Post) ? 'Post' : 'Comment';masked=item.status!='visible' && !Access.admin?(user) && !(kind=='Post' && item.status=='hidden' && item.user_id==user.id)
       interactive=!SiteSetting.whisper_read_only && (!Ban.exists?(user_id:user.id) || Access.admin?(user)) && item.status=='visible' && post.status=='visible'
       reactions=Reaction.where(target_kind:kind,target_id:item.id)
-      label=alias_name(post,item.user_id)
-      out={id:item.id,kind:kind,alias:label,initial:label=='洞主' ? '洞' : label.delete_prefix('匿名 '),mine:item.user_id==user.id,body:masked ? (item.status=='deleted' ? '这条回复已删除' : '这条回复已隐藏') : item.body,
+      identity_data=identity(item,user,identity_mode:identity_mode)
+      # A public reply must not disclose its author's anonymous alias elsewhere.
+      label=identity_data[:author]&.fetch(:username) || (item.public_author ? (masked ? '身份已隐藏' : '已注销用户') : alias_name(post,item.user_id))
+      out={id:item.id,kind:kind,alias:label,initial:item.public_author ? '匿' : (label=='洞主' ? '洞' : label.delete_prefix('匿名 ')),mine:item.user_id==user.id,body:masked ? (item.status=='deleted' ? '这条回复已删除' : '这条回复已隐藏') : item.body,
         masked:masked,status:item.status,created_at:item.created_at,floor:kind=='Post' ? 1 : floors[item.id],can_reply:interactive,can_interact:interactive,can_manage:Access.admin?(user) && !SiteSetting.whisper_read_only,
         can_delete:item.user_id==user.id && item.status!='deleted' && !SiteSetting.whisper_read_only,likes:masked ? 0 : reactions.where(value:1).count,dislikes:masked ? 0 : reactions.where(value:-1).count,reaction:reactions.find_by(user_id:user.id)&.value,
         reported:Report.exists?(user_id:user.id,target_kind:kind,target_id:item.id,handled_at:nil),images:masked ? [] : Shared.media_urls(item.media_ids),url:path(post,kind=='Comment' ? item : nil)}
       if kind=='Comment' && item.parent_id && (parent=Comment.find_by(id:item.parent_id,target_kind:'Post',target_id:post.id))
         out[:parent]={id:parent.id,alias:alias_name(post,parent.user_id),floor:floors[parent.id],excerpt:parent.status=='visible' ? parent.body.truncate(100) : '该回复已隐藏或删除',url:path(post,parent)}
+        parent_identity=identity(parent,user,identity_mode:identity_mode)
+        out[:parent][:alias]=parent_identity[:author]&.fetch(:username) || (parent.status=='visible' ? '已注销用户' : '身份已隐藏') if parent.public_author || parent_identity[:author]
       end
-      out
+      out.merge(identity_data)
     end
     def self.state(user,query)
       Access.check!(user)
+      identity_mode=Shared.bool(query['identity_mode'])
+      Access.check!(user,admin:true) if identity_mode
       view=query['view'].presence || 'feed'
       raise Discourse::NotFound unless %w[feed new post mine notifications admin].include?(view)
       ban=Ban.find_by(user_id:user.id)
-      out={title:'树洞',view:view,readonly:SiteSetting.whisper_read_only,admin:Access.admin?(user),banned:ban.present? && !Access.admin?(user),ban_reason:ban&.reason,
+      out={title:'树洞',view:view,identity_mode:identity_mode,readonly:SiteSetting.whisper_read_only,admin:Access.admin?(user),banned:ban.present? && !Access.admin?(user),ban_reason:ban&.reason,
         tabs:[{id:'feed',label:'树洞广场'},{id:'mine',label:'我的参与'},{id:'notifications',label:'消息'}],unread:Inbox.where(user_id:user.id,read:false).count,rows:[],forms:[]}
       out[:tabs]<<{id:'admin',label:'管理'} if Access.admin?(user)
       case view
@@ -75,7 +91,7 @@ module DiscourseWhisper
           scope,paging=paginate(Comment.where(user_id:user.id,status:'visible').order(created_at: :desc,id: :desc),query)
           out[:rows]=scope.map do |c|
             post=Post.find(c.target_id);available=can_view?(post,user)
-            {id:c.id,comment:true,title:available ? (post.title.presence || '匿名树洞') : '树洞已不可见',excerpt:c.body,created_at:c.created_at,activity_at:c.created_at,status:c.status,url:available ? path(post,c) : nil,can_delete:!SiteSetting.whisper_read_only}
+            {id:c.id,comment:true,title:available ? title(post) : '树洞已不可见',excerpt:c.body,created_at:c.created_at,activity_at:c.created_at,status:c.status,url:available ? path(post,c) : nil,can_delete:!SiteSetting.whisper_read_only}.merge(identity(c,user,identity_mode:identity_mode))
           end
         else
           q=query['q'].to_s.strip
@@ -89,12 +105,12 @@ module DiscourseWhisper
           sort=query['sort']=='active' && q.blank? && view=='feed' ? 'active' : 'new'
           scope=sort=='active' ? scope.order(Arel.sql('last_comment_at DESC NULLS LAST, created_at DESC, id DESC')) : scope.order(created_at: :desc,id: :desc)
           scope,paging=paginate(scope,query)
-          out.merge!(q:q,sort:sort,part:'posts',rows:scope.map { |post| summary(post,user) })
+          out.merge!(q:q,sort:sort,part:'posts',rows:scope.map { |post| summary(post,user,identity_mode:identity_mode) })
         end
         out[:pagination]=paging
       when 'new'
         if !out[:readonly] && !out[:banned]
-          out[:forms]=[Ui.form('发布树洞','post',[Ui.field('title','标题（可选）',maxlength:80),Ui.field('body','想说的话',type:'textarea',required:true,maxlength:4000),Ui.field('images','配图',type:'upload')],button:'匿名发布')]
+          out[:forms]=[Ui.form('发布树洞','post',[Ui.field('title','标题（可选）',maxlength:80),Ui.field('body','想说的话',type:'textarea',required:true,maxlength:4000),Ui.field('images','配图',type:'upload')],button:'发布')]
         end
       when 'post'
         post=query['code'].present? ? Post.find_by!(public_code:query['code']) : Post.find(Shared.id(query['id']))
@@ -107,34 +123,34 @@ module DiscourseWhisper
         end
         page,paging=paginate(comments,selected,50)
         # A hidden post remains visible only to its owner/staff; hidden reply bodies remain staff-only.
-        out.merge!(post:summary(post,user).merge(entry(post,post,user)),replies:page.map { |c| entry(c,post,user,floors) },pagination:paging,
+        out.merge!(post:summary(post,user,identity_mode:identity_mode).merge(entry(post,post,user,identity_mode:identity_mode)),replies:page.map { |c| entry(c,post,user,floors,identity_mode:identity_mode) },pagination:paging,
           audits:Audit.where(target_kind:'Post',target_id:post.id,action:'reveal_identity').order(:created_at,:id).map { |a| {id:a.id,moderator:Shared.user_name(a.user_id),moderator_user:Shared.forum_user(a.user_id),reason:a.reason,created_at:a.created_at} })
       when 'notifications'
         scope,paging=paginate(Inbox.where(user_id:user.id).order(created_at: :desc,id: :desc),query)
         out[:rows]=scope.map do |n|
           post=Post.find_by(id:n.post_id);available=post && can_view?(post,user)
           comment=Comment.find_by(id:n.comment_id,target_id:post&.id)
-          {id:n.id,title:notification_text(n.kind),message:n.message.presence || (n.kind=='COMMENT_REPLY' && available && comment&.status=='visible' ? comment.body.truncate(80) : nil),read:n.read,historical:n.historical,created_at:n.created_at,url:available ? path(post,comment) : nil,post_label:available ? (post.title.presence || '匿名树洞') : '树洞已不可见'}
+          {id:n.id,title:notification_text(n.kind),message:n.message.presence || (n.kind=='COMMENT_REPLY' && available && comment&.status=='visible' ? comment.body.truncate(80) : nil),read:n.read,historical:n.historical,created_at:n.created_at,url:available ? path(post,comment) : nil,post_label:available ? title(post) : '树洞已不可见'}
         end
         out[:pagination]=paging
       when 'admin'
         Access.check!(user,admin:true)
-        admin_state(out,user,query)
+        admin_state(out,user,query,identity_mode:identity_mode)
       end
       out
     end
-    def self.admin_state(out,user,query)
+    def self.admin_state(out,user,query,identity_mode:false)
       part=%w[posts reports audits bans].include?(query['part']) ? query['part'] : 'posts';out[:part]=part
       case part
       when 'posts'
         status=%w[visible hidden deleted].include?(query['status']) ? query['status'] : 'all';scope=Post.all;scope=scope.where(status:status) unless status=='all'
         scope,paging=paginate(scope.order(created_at: :desc,id: :desc),query,30)
-        out.merge!(status:status,rows:scope.map { |p| summary(p,user) },pagination:paging)
+        out.merge!(status:status,rows:scope.map { |p| summary(p,user,identity_mode:identity_mode) },pagination:paging)
       when 'reports'
         scope,paging=paginate(Report.where(handled_at:nil).order(created_at: :desc,id: :desc),query,30)
         out[:rows]=scope.map do |r|
           item=targets.fetch(r.target_kind).find_by(id:r.target_id);post=item && post_for(item)
-          {id:r.id,kind:r.target_kind,target_id:r.target_id,reason:r.reason,created_at:r.created_at,body:item&.body,status:item&.status,url:post ? path(post,item.is_a?(Comment) ? item : nil) : nil,public_code:post&.public_code}
+          {id:r.id,kind:r.target_kind,target_id:r.target_id,reason:r.reason,created_at:r.created_at,body:item&.body,status:item&.status,url:post ? path(post,item.is_a?(Comment) ? item : nil) : nil,public_code:post&.public_code}.merge(item ? identity(item,user,identity_mode:identity_mode) : {})
         end
         out[:pagination]=paging
       when 'audits'
@@ -155,16 +171,16 @@ module DiscourseWhisper
           break unless Post.exists?(public_code:code)
         end
         raise Error,'编号生成失败，请重试' if Post.exists?(public_code:code)
-        post=Post.create!(user_id:user.id,public_code:code,title:Shared.text(data['title'],80,required:false).presence,body:Shared.text(data['body'],4000),media_ids:Shared.media_ids(user,data['media_ids']))
+        post=Post.create!(user_id:user.id,public_code:code,title:Shared.text(data['title'],80,required:false).presence,body:Shared.text(data['body'],4000),media_ids:Shared.media_ids(user,data['media_ids']),public_author:Shared.bool(data['public_author']))
         {query:{view:'post',id:post.id}}
       when 'reply'
         post=Post.lock.find(Shared.id(data['id']));visible_target!(post,user)
         parent=data['parent_id'].present? ? Comment.find(Shared.id(data['parent_id'])) : nil
         raise Error,'回复不属于此树洞' if parent && (parent.target_kind!='Post' || parent.target_id!=post.id || parent.status!='visible')
-        unless post.user_id==user.id || Alias.exists?(post_id:post.id,user_id:user.id)
+        unless (post.user_id==user.id && !post.public_author) || Alias.exists?(post_id:post.id,user_id:user.id)
           Alias.create!(post_id:post.id,user_id:user.id,ordinal:(Alias.where(post_id:post.id).maximum(:ordinal) || -1)+1)
         end
-        comment=Comment.create!(user_id:user.id,target_kind:'Post',target_id:post.id,parent_id:parent&.id,body:Shared.text(data['body'],1200),anonymous:true)
+        comment=Comment.create!(user_id:user.id,target_kind:'Post',target_id:post.id,parent_id:parent&.id,body:Shared.text(data['body'],1200),anonymous:!Shared.bool(data['public_author']),public_author:Shared.bool(data['public_author']))
         post.update!(last_comment_at:comment.created_at)
         ([post.user_id,parent&.user_id].compact.uniq-[user.id]).each { |id| Shared.notify(id,'COMMENT_REPLY',post:post,comment:comment,key:"reply:#{comment.id}:#{id}") }
         {query:{view:'post',id:post.id,reply:comment.id},message:'回复已发布'}

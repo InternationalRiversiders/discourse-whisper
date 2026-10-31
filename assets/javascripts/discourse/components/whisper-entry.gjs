@@ -1,3 +1,4 @@
+import ForumUser from "./whisper-user";
 import Component from "@glimmer/component";
 import { on } from "@ember/modifier";
 import { fn } from "@ember/helper";
@@ -9,10 +10,10 @@ export default class extends Component {
   get anchor() { return this.args.entry.kind === "Post" ? "whisper-first-post" : `whisper-reply-${this.args.entry.id}`; }
   <template>
     <article class="whisper-post {{if @entry.masked 'is-masked'}}" id={{this.anchor}} data-entry-id={{@entry.id}}>
-      <div class="topic-avatar"><span class="whisper-avatar {{if (eq @entry.alias '洞主') 'is-op'}}" aria-hidden="true">{{@entry.initial}}</span></div>
+      <div class="topic-avatar">{{#if @entry.author}}<ForumUser @user={{@entry.author}} @avatarOnly={{true}} />{{else}}<span class="whisper-avatar {{if (eq @entry.alias '洞主') 'is-op'}}" aria-hidden="true">{{@entry.initial}}</span>{{/if}}</div>
       <div class="topic-body">
         <header class="topic-meta-data">
-          <div class="names"><strong>{{@entry.alias}}</strong>{{#if @entry.mine}}<span class="whisper-mine">你</span>{{/if}}{{#unless (eq @entry.status "visible")}}<span class="whisper-status">{{if (eq @entry.status "hidden") "已隐藏" "已删除"}}</span>{{/unless}}</div>
+          <div class="names">{{#if @entry.author}}<ForumUser @user={{@entry.author}} @hideAvatar={{true}} /><span class="whisper-status">{{@entry.identity_label}}</span>{{else}}<strong>{{@entry.alias}}</strong>{{/if}}{{#if @entry.mine}}<span class="whisper-mine">你</span>{{/if}}{{#unless (eq @entry.status "visible")}}<span class="whisper-status">{{if (eq @entry.status "hidden") "已隐藏" "已删除"}}</span>{{/unless}}</div>
           <div class="whisper-post-time"><a href={{@entry.url}} {{on "click" @visit}} aria-label="回复链接">#{{@entry.floor}}</a><DRelativeDate @date={{@entry.created_at}} /></div>
         </header>
         {{#if @entry.parent}}<a class="whisper-quote" href={{@entry.parent.url}} {{on "click" @visit}}><span>{{dIcon "reply"}} 回复 {{@entry.parent.alias}} · #{{@entry.parent.floor}}</span><p>{{@entry.parent.excerpt}}</p></a>{{/if}}

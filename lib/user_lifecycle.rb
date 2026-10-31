@@ -24,7 +24,7 @@ module DiscourseWhisper
         Audit.where(user_id:id).update_all(user_id:Discourse.system_user.id)
         Audit.where("details->>'revealed_user_id' = ?",id.to_s).update_all(details:{})
         Alias.where(user_id:id).update_all(user_id:replacement)
-        attributes={user_id:replacement}
+        attributes={user_id:replacement,public_author:false}
         attributes.merge!(body:'内容已随账号删除',status:'deleted',media_ids:[]) if erase_content
         Post.where(user_id:id).update_all(attributes.merge(erase_content ? {title:nil} : {}))
         Comment.where(user_id:id).update_all(attributes)

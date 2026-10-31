@@ -8,6 +8,9 @@ import { ajax } from "discourse/lib/ajax";
 import { extractError } from "discourse/lib/ajax-error";
 export default class extends Component {
   @tracked busy = false;
+  @tracked publicAuthor = false;
+  get hasIdentityChoice() { return ["post", "reply"].includes(this.args.form.operation); }
+  @action toggleIdentity() { this.publicAuthor = !this.publicAuthor; this.args.dirty?.(); }
   @tracked error = "";
   @tracked previews = [];
   mediaIds = [];
@@ -54,6 +57,7 @@ export default class extends Component {
       }
     }
     const data = { ...this.args.form.data, ...values };
+    if (this.hasIdentityChoice) { data.public_author = this.publicAuthor; }
     if (this.mediaIds.length) {
       data.media_ids = this.mediaIds;
     }
@@ -67,6 +71,7 @@ export default class extends Component {
       this.key = null;
       this.fingerprint = null;
       event.target.reset();
+      this.publicAuthor = false;
       this.mediaIds = []; this.previews = [];
     } catch (error) {
       this.error = extractError(error);
@@ -168,11 +173,15 @@ export default class extends Component {
           role="alert"
           class="river-error"
         >{{this.error}}</p>{{/if}}
+      {{#if this.hasIdentityChoice}}<div class="whisper-identity-choice">
+        <button type="button" class="btn {{if this.publicAuthor 'btn-primary'}}" aria-pressed={{if this.publicAuthor "true" "false"}} disabled={{this.busy}} {{on "click" this.toggleIdentity}}>{{if this.publicAuthor "实名模式 · 已开启" "实名模式 · 未开启"}}</button>
+        <small>{{if this.publicAuthor "本条内容将显示你的论坛用户名和头像。" "本条内容匿名发布；树洞管理员可查看真实作者。"}}</small>
+      </div>{{/if}}
       <div class="river-form-footer"><button
           class="btn btn-primary"
           type="submit"
           disabled={{this.busy}}
-        >{{if this.busy "正在保存…" @form.button}}</button></div>
+        >{{#if this.busy}}正在保存…{{else if this.hasIdentityChoice}}{{if this.publicAuthor "实名发布" "匿名发布"}}{{else}}{{@form.button}}{{/if}}</button></div>
     </form>
   </template>
 }
