@@ -3,7 +3,7 @@ require 'digest'
 module DiscourseWhisper
   class Importer
     def initialize(payload, directory: nil, allow_missing_media: false)
-      @payload=payload;@tables=payload.fetch('tables');@directory=directory;@media_cache={};@allow_missing_media=allow_missing_media
+      @payload=payload;@tables=payload.fetch('tables').except('IdentityRevealAudit','ModerationEvent');@directory=directory;@media_cache={};@allow_missing_media=allow_missing_media
       raise Error,'导出文件格式或项目不符' unless payload['format']=='riverside-community-v1' && payload['project']=='whisper'
     end
     def rows(name) = @tables[name] || []
@@ -100,7 +100,7 @@ end
 module DiscourseWhisper
   class Importer
     def import_domain
-      rows('User').each { |u| Ban.create!(user_id:user(u['externalUserId']),reason:u['banReason'].presence || '迁移前的树洞发布限制',created_at:Time.iso8601(u['bannedAt']),updated_at:Time.iso8601(u['bannedAt'])) if u['bannedAt'] }
+      rows('User').each { |u| Ban.create!(user_id:user(u['externalUserId']),created_at:Time.iso8601(u['bannedAt']),updated_at:Time.iso8601(u['bannedAt'])) if u['bannedAt'] }
       rows('Post').each { |r| uid=local_user(r['authorId']);put('Post',r,Post,{user_id:uid,public_code:r['publicCode'],title:r['title'],body:r['body'],status:status(r),media_ids:images(r['imageUrls'],uid),last_comment_at:r['lastCommentAt'],missing_media_count:Array(r['imageUrls']).count { |name| Array(@payload['media']).any? { |m| m['name']==name && m['missing'] } }}) }
       pending=rows('Comment').sort_by { |r| [r['createdAt'].to_s,r['id'].to_s] }
       until pending.empty?
@@ -123,9 +123,7 @@ module DiscourseWhisper
       end
       rows('Reaction').each { |r| import_reaction('Reaction',r,r['targetType']=='COMMENT' ? 'Comment' : 'Post',r['commentId'] || r['postId'],r['type']=='DISLIKE' ? -1 : 1) }
       rows('Report').each { |r| kind=r['targetType']=='COMMENT' ? 'Comment' : 'Post';put('Report',r,Report,{user_id:local_user(r['reporterId']),target_kind:kind,target_id:ref(kind,r['commentId'] || r['postId']),reason:r['reason']}) }
-      rows('IdentityRevealAudit').each { |r| put('IdentityRevealAudit',r,Audit,{user_id:local_user(r['moderatorId']),action:'reveal_identity',target_kind:'Post',target_id:ref('Post',r['postId']),reason:r['reason'],details:{revealed_user_id:local_user(r['revealedUserId'])}}) }
       rows('Notification').each { |r| put('Notification',r,Inbox,{user_id:local_user(r['userId']),post_id:ref('Post',r['postId']),comment_id:r['commentId'] ? ref('Comment',r['commentId']) : nil,kind:r['type'],message:r['message'],read:!!r['read'],historical:true}) }
-      rows('ModerationEvent').each { |r| kind=r['commentId'] ? 'Comment' : 'Post';put('ModerationEvent',r,Audit,{user_id:local_user(r['moderatorId']),action:r['action'],target_kind:kind,target_id:ref(kind,r['commentId'] || r['postId']),reason:r['reason'].presence || '迁移前的管理操作'}) }
     end
   end
 end

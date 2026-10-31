@@ -7,7 +7,7 @@ if(!sourceDir || !output || !process.env.LEGACY_DATABASE_URL) { throw new Error(
 const require=createRequire(path.resolve(sourceDir,'package.json'));
 const {PrismaClient}=require('@prisma/client');
 const db=new PrismaClient({datasources:{db:{url:process.env.LEGACY_DATABASE_URL}}});
-const models=["User", "Post", "Comment", "Reaction", "Report", "IdentityRevealAudit", "ModerationEvent", "Notification"];
+const models=["User", "Post", "Comment", "Reaction", "Report", "Notification"];
 const payload={format:'riverside-community-v1',project:'whisper',exported_at:new Date().toISOString(),tables:{},media:[]};
 try {
   await db.$transaction(async tx=>{

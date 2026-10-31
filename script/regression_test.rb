@@ -212,18 +212,44 @@ class WhisperTest < Minitest::Test
     assert_equal 1,state(@admin,view:'admin',part:'reports')[:rows].size
     refute_includes state(@admin,view:'admin',part:'reports').to_json,@bob.username
   end
-  def test_audited_reveal_does_not_survive_permission_revocation
-    p=post;key=SecureRandom.uuid
-    assert_raises(Discourse::InvalidAccess) { call(@bob,'reveal',{id:p.id,reason:'x'}) }
-    assert_raises(A::Error) { call(@admin,'reveal',{id:p.id,reason:''}) }
-    result=call(@admin,'reveal',{id:p.id,reason:'核查测试'},key:key)
-    assert_includes result[:message],@alice.username
-    call(@admin,'reveal',{id:p.id,reason:'核查测试'},key:key)
-    assert_equal 1,A::Audit.where(action:'reveal_identity').count
-    assert_equal '核查测试',state(@bob,view:'post',id:p.id)[:audits].first[:reason]
-    refute_includes state(@bob,view:'post',id:p.id).to_json,@alice.username
-    @group.add(@admin);@admin.update!(admin:false);@admin.reload
-    assert_raises(Discourse::InvalidAccess) { call(@admin,'reveal',{id:p.id,reason:'核查测试'},key:key) }
+  def test_cleanup_migration_removes_old_identity_history_and_keeps_content
+    require_relative '../db/migrate/20261031020000_remove_whisper_audit_workflow'
+    p=post
+    migration=RemoveWhisperAuditWorkflow.new
+    migration.migrate(:down)
+    A::Record.connection.execute("INSERT INTO river_whisper_audits (user_id, action, reason, created_at, updated_at) VALUES (1, 'reveal_identity', 'old reason', NOW(), NOW())")
+    A::Command.create!(user_id:@admin.id,key:SecureRandom.uuid,fingerprint:'old',result:{identity_user_id:@alice.id})
+    A::Legacy.create!(source:'IdentityRevealAudit',legacy_id:'old-audit',target_kind:'Audit',data:{})
+    A::Legacy.create!(source:'ModerationEvent',legacy_id:'old-moderation',target_kind:'Audit',data:{})
+    migration.migrate(:up)
+    refute A::Record.connection.table_exists?(:river_whisper_audits)
+    refute A::Record.connection.column_exists?(:river_whisper_bans,:reason)
+    assert_empty A::Command.where("result ? 'identity_user_id'")
+    assert_empty A::Legacy.where(source:%w[IdentityRevealAudit ModerationEvent])
+    assert_equal '一段匿名文字',p.reload.body
+  ensure
+    A::Ban.reset_column_information
+  end
+  def test_removed_reveal_cannot_replay_a_cached_identity_and_management_needs_no_reason
+    p=post
+    key=SecureRandom.uuid;data={'id'=>p.id}
+    fingerprint=Digest::SHA256.hexdigest(['reveal',A::Shared.canonical(data)].to_json)
+    A::Command.create!(user_id:@admin.id,key:key,fingerprint:fingerprint,result:{identity_user_id:@alice.id})
+    assert_raises(A::Error) { call(@admin,'reveal',data,key:key) }
+    assert_raises(A::Error) { call(@bob,'reveal',data) }
+    refute state(@admin,view:'post',id:p.id).key?(:audits)
+    assert_equal 'posts',state(@admin,view:'admin',part:'audits')[:part]
+    refute A::Record.connection.table_exists?(:river_whisper_audits)
+    call(@admin,'moderate',{kind:'Post',id:p.id,status:'hidden'})
+    assert_equal 'hidden',p.reload.status
+    call(@admin,'moderate',{kind:'Post',id:p.id,status:'visible'})
+    assert_equal 'visible',p.reload.status
+    call(@admin,'ban',{username:@bob.username,banned:true})
+    assert state(@bob)[:banned]
+    call(@admin,'ban',{username:@bob.username,banned:false})
+    refute state(@bob)[:banned]
+    assert_raises(A::Error) { call(@bob,'report',{kind:'Post',id:p.id}) }
+    refute state(@admin,view:'admin',part:'bans')[:forms].first[:fields].any? { |f| f[:name]=='reason' }
   end
   def test_bans_and_deletion_ownership
     p=post;c=reply(p)
@@ -279,16 +305,14 @@ class WhisperTest < Minitest::Test
     A::Importer.new(data,directory:'/tmp',allow_missing_media:true).run(sha:'missing',apply:true,expected_sha:'missing')
     assert_equal 1,A::Post.first.missing_media_count;assert_empty A::Post.first.media_ids
   end
-  def test_lifecycle_erases_identity_and_cached_reveal
-    p=post;c=reply(p);call(@admin,'reveal',{id:p.id,reason:'测试'})
+  def test_lifecycle_erases_identity
+    p=post;c=reply(p)
     A::Legacy.create!(source:'User',legacy_id:'old-alice',data:{externalUserId:@alice.id.to_s,forumUsername:@alice.username})
     A::Legacy.create!(source:'Post',legacy_id:'old-post',target_kind:'Post',target_id:p.id,data:{authorId:'old-alice',body:p.body})
     A::UserLifecycle.purge(@alice.id)
     assert_equal 'deleted',p.reload.status;refute_equal @alice.id,p.user_id
     assert_empty A::Legacy.all
-    assert_empty A::Command.where("result->>'identity_user_id' = ?",@alice.id.to_s)
     assert_equal '认真回复',c.reload.body
-    assert_empty A::Audit.first.details
   end
   def test_anonymization_preserves_content_without_private_identity
     p=post;c=reply(p)

@@ -6,7 +6,7 @@ module DiscourseWhisper
   class Record < ActiveRecord::Base
     self.abstract_class = true
   end
-  %w[Command Event Audit Legacy Media Reaction Report Comment Inbox].each do |name|
+  %w[Command Event Legacy Media Reaction Report Comment Inbox].each do |name|
     klass = Class.new(Record)
     klass.table_name = name == 'Media' ? 'river_whisper_media' : "river_whisper_#{name.underscore.pluralize}"
     const_set(name, klass)
@@ -66,9 +66,6 @@ module DiscourseWhisper
         Command.create!(user_id: user.id, key: key, fingerprint: fingerprint, result: result)
         result
       end
-    end
-    def self.audit(actor, action, item, reason, details = {})
-      Audit.create!(user_id: actor.id, action: action, target_kind: item.class.name.demodulize, target_id: item.id, reason: text(reason, 240), details: details)
     end
     # Public forum fields only; callers enforce each feature's anonymity rules.
     def self.forum_user(id)

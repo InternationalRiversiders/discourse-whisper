@@ -4,9 +4,11 @@ module DiscourseWhisper
   class Alias < Record; self.table_name='river_whisper_aliases'; end
   class Ban < Record; self.table_name='river_whisper_bans'; end
   module Service
-    ADMIN_OPERATIONS=%w[moderate reveal ban resolve_report dismiss_reports].freeze
+    ADMIN_OPERATIONS=%w[moderate ban resolve_report dismiss_reports].freeze
+    OPERATIONS=(ADMIN_OPERATIONS+%w[post reply react report delete_own mark_read]).freeze
     def self.targets = {'Post'=>Post,'Comment'=>Comment}
     def self.authorize_operation!(user,operation)
+      raise Error,'未知操作' unless OPERATIONS.include?(operation)
       Access.check!(user,admin:true) if ADMIN_OPERATIONS.include?(operation)
       if Ban.exists?(user_id:user.id) && !Access.admin?(user) && !%w[delete_own mark_read].include?(operation)
         raise Error,'你当前被限制在树洞发布内容'
@@ -81,7 +83,7 @@ module DiscourseWhisper
       view=query['view'].presence || 'feed'
       raise Discourse::NotFound unless %w[feed new post mine notifications admin].include?(view)
       ban=Ban.find_by(user_id:user.id)
-      out={title:'树洞',view:view,identity_mode:identity_mode,readonly:SiteSetting.whisper_read_only,admin:Access.admin?(user),banned:ban.present? && !Access.admin?(user),ban_reason:ban&.reason,
+      out={title:'树洞',view:view,identity_mode:identity_mode,readonly:SiteSetting.whisper_read_only,admin:Access.admin?(user),banned:ban.present? && !Access.admin?(user),
         tabs:[{id:'feed',label:'树洞广场'},{id:'mine',label:'我的参与'},{id:'notifications',label:'消息'}],unread:Inbox.where(user_id:user.id,read:false).count,rows:[],forms:[]}
       out[:tabs]<<{id:'admin',label:'管理'} if Access.admin?(user)
       case view
@@ -123,8 +125,7 @@ module DiscourseWhisper
         end
         page,paging=paginate(comments,selected,50)
         # A hidden post remains visible only to its owner/staff; hidden reply bodies remain staff-only.
-        out.merge!(post:summary(post,user,identity_mode:identity_mode).merge(entry(post,post,user,identity_mode:identity_mode)),replies:page.map { |c| entry(c,post,user,floors,identity_mode:identity_mode) },pagination:paging,
-          audits:Audit.where(target_kind:'Post',target_id:post.id,action:'reveal_identity').order(:created_at,:id).map { |a| {id:a.id,moderator:Shared.user_name(a.user_id),moderator_user:Shared.forum_user(a.user_id),reason:a.reason,created_at:a.created_at} })
+        out.merge!(post:summary(post,user,identity_mode:identity_mode).merge(entry(post,post,user,identity_mode:identity_mode)),replies:page.map { |c| entry(c,post,user,floors,identity_mode:identity_mode) },pagination:paging)
       when 'notifications'
         scope,paging=paginate(Inbox.where(user_id:user.id).order(created_at: :desc,id: :desc),query)
         out[:rows]=scope.map do |n|
@@ -140,7 +141,7 @@ module DiscourseWhisper
       out
     end
     def self.admin_state(out,user,query,identity_mode:false)
-      part=%w[posts reports audits bans].include?(query['part']) ? query['part'] : 'posts';out[:part]=part
+      part=%w[posts reports bans].include?(query['part']) ? query['part'] : 'posts';out[:part]=part
       case part
       when 'posts'
         status=%w[visible hidden deleted].include?(query['status']) ? query['status'] : 'all';scope=Post.all;scope=scope.where(status:status) unless status=='all'
@@ -153,12 +154,9 @@ module DiscourseWhisper
           {id:r.id,kind:r.target_kind,target_id:r.target_id,reason:r.reason,created_at:r.created_at,body:item&.body,status:item&.status,url:post ? path(post,item.is_a?(Comment) ? item : nil) : nil,public_code:post&.public_code}.merge(item ? identity(item,user,identity_mode:identity_mode) : {})
         end
         out[:pagination]=paging
-      when 'audits'
-        scope,paging=paginate(Audit.order(created_at: :desc,id: :desc),query,30)
-        out[:rows]=scope.map { |a| {id:a.id,moderator:Shared.user_name(a.user_id),moderator_user:Shared.forum_user(a.user_id),action:a.action,reason:a.reason,created_at:a.created_at} };out[:pagination]=paging
       when 'bans'
-        out[:rows]=Ban.order(id: :desc).map { |b| {id:b.id,username:Shared.user_name(b.user_id),forum_user:Shared.forum_user(b.user_id),reason:b.reason,created_at:b.created_at} }
-        out[:forms]=[Ui.form('树洞发言限制','ban',[Ui.field('username','论坛用户名',required:true),Ui.field('banned','限制发言',true,type:'checkbox'),Ui.field('reason','处理理由',required:true,maxlength:240)],button:'保存限制')] unless out[:readonly]
+        out[:rows]=Ban.order(id: :desc).map { |b| {id:b.id,username:Shared.user_name(b.user_id),forum_user:Shared.forum_user(b.user_id),created_at:b.created_at} }
+        out[:forms]=[Ui.form('树洞发言限制','ban',[Ui.field('username','论坛用户名',required:true),Ui.field('banned','限制发言',true,type:'checkbox')],button:'保存限制')] unless out[:readonly]
       end
     end
     def self.call(user,operation,data)
@@ -194,24 +192,20 @@ module DiscourseWhisper
         end
         if operation=='moderate'
           status=data['status'];raise Error,'无效状态' unless %w[visible hidden deleted].include?(status)
-          Shared.audit(user,status,item,data['reason']);item.update!(status:status)
+          item.update!(status:status)
           Shared.notify(item.user_id,'MODERATION',post:post,key:"moderate:#{item.class.name}:#{item.id}:#{item.updated_at.to_f}")
           return {message:'管理处理已保存'}
         end
         visible_target!(item,user)
         operation=='react' ? react(user,item,post,data['value']) : report(user,item,post,data['reason'])
-      when 'reveal'
-        post=Post.find(Shared.id(data['id']));Shared.audit(user,'reveal_identity',post,data['reason'],{'revealed_user_id'=>post.user_id})
-        {message:"已记录公开审计。洞主：#{Shared.user_name(post.user_id)}",identity_user_id:post.user_id}
       when 'ban'
-        target=User.find_by!(username_lower:data['username'].to_s.strip.downcase);reason=Shared.text(data['reason'],240)
-        Shared.bool(data['banned']) ? Ban.find_or_initialize_by(user_id:target.id).update!(reason:reason) : Ban.where(user_id:target.id).delete_all
-        Shared.audit(user,'posting_restriction',target,reason)
+        target=User.find_by!(username_lower:data['username'].to_s.strip.downcase)
+        Shared.bool(data['banned']) ? Ban.find_or_create_by!(user_id:target.id) : Ban.where(user_id:target.id).delete_all
         Shared.notify(target.id,'BAN',key:"ban:#{target.id}:#{SecureRandom.uuid}");{message:'发言限制已更新'}
       when 'resolve_report','dismiss_reports'
         scope=operation=='resolve_report' ? Report.where(id:Shared.id(data['id']),handled_at:nil) : Report.where(target_kind:data['kind'],target_id:Shared.id(data['id']),handled_at:nil)
         scope.lock.each do |r|
-          r.update!(handled_at:Time.current);Shared.audit(user,'resolve_report',r,'举报已处理')
+          r.update!(handled_at:Time.current)
           Shared.notify(r.user_id,'REPORT_RESOLVED',key:"report-resolved:#{r.id}")
         end
         {message:'举报已处理'}
